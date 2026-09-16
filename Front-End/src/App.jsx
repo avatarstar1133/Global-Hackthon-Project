@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar.jsx'
 import Onboarding from './screens/Onboarding.jsx'
 import Home from './screens/Home.jsx'
@@ -8,82 +8,200 @@ import Debrief from './screens/Debrief.jsx'
 import Challenge from './screens/Challenge.jsx'
 import Quiz from './screens/Quiz.jsx'
 import Progress from './screens/Progress.jsx'
-import { actors } from './data.js'
+import { actors as actorStyles } from './data.js'
+import { bridgeApi } from './api.js'
 
-function loadProfile() {
-  try {
-    const raw = localStorage.getItem('bridge_profile')
-    if (!raw) return null
-    const saved = JSON.parse(raw)
-    if (!actors[saved.recommended]) saved.recommended = 'friends'
-    return saved
-  } catch { return null }
+const USER_KEY = 'bridge_user_id'
+const actorKeyFor = (type) => type === 'professor' ? 'professors' : 'friends'
+const actorTypeFor = (key) => key === 'professors' ? 'professor' : 'friend'
+
+function profileFromUser(user) {
+  if (!user?.profile) return null
+  return {
+    displayName: user.displayName,
+    origin: user.profile.countryOfOrigin,
+    time: user.profile.usExperience,
+    confidence: user.profile.currentConfidence,
+    baselineConfidence: user.profile.baselineConfidence,
+    recommended: actorKeyFor(user.profile.hardestActorType),
+    ratings: {
+      class: user.profile.classroomComfort,
+      disagree: user.profile.disagreementComfort,
+      smalltalk: user.profile.smallTalkComfort,
+    },
+  }
 }
-function saveHistory(record) {
-  try {
-    const list = JSON.parse(localStorage.getItem('bridge_history') || '[]')
-    list.push(record)
-    localStorage.setItem('bridge_history', JSON.stringify(list.slice(-50)))
-  } catch { /* ignore local storage failures */ }
+
+function buildCatalog(apiActors, apiScenarios) {
+  return apiActors.reduce((catalog, apiActor) => {
+    const key = actorKeyFor(apiActor.actorType)
+    const visual = actorStyles[key]
+    if (!visual) return catalog
+    catalog[key] = {
+      ...visual,
+      id: apiActor.id,
+      actorType: apiActor.actorType,
+      persona: {
+        ...visual.persona,
+        name: apiActor.name,
+        role: apiActor.role,
+      },
+      scenarios: apiScenarios
+        .filter((scenario) => scenario.actorId === apiActor.id)
+        .map((scenario) => ({
+          id: scenario.id,
+          title: scenario.title,
+          desc: scenario.description,
+          level: scenario.difficulty.charAt(0).toUpperCase() + scenario.difficulty.slice(1),
+          scene: scenario.description,
+          goal: scenario.goal,
+          opener: scenario.openingMessage,
+          cultureContext: scenario.cultureContext,
+        })),
+    }
+    return catalog
+  }, {})
 }
 
 export default function App() {
-  const [profile, setProfile] = useState(loadProfile)
-  const [screen, setScreen] = useState(profile ? 'home' : 'onboarding')
+  const [userId, setUserId] = useState(() => localStorage.getItem(USER_KEY))
+  const [profile, setProfile] = useState(null)
+  const [catalog, setCatalog] = useState(null)
+  const [screen, setScreen] = useState('loading')
   const [selected, setSelected] = useState(null)
+  const [session, setSession] = useState(null)
   const [evaluation, setEvaluation] = useState(null)
-  const [chatKey, setChatKey] = useState(0)
+  const [error, setError] = useState('')
 
-  function persistProfile(next) {
-    try { localStorage.setItem('bridge_profile', JSON.stringify(next)) } catch { /* ignore */ }
-    setProfile(next)
+  async function loadCatalog() {
+    const [apiActors, apiScenarios] = await Promise.all([
+      bridgeApi.getActors(),
+      bridgeApi.getScenarios(),
+    ])
+    const next = buildCatalog(apiActors, apiScenarios)
+    setCatalog(next)
+    return next
   }
-  function finishOnboarding(next) { persistProfile(next); setScreen('home') }
-  function retake() { try { localStorage.removeItem('bridge_profile') } catch { /* ignore */ }; setScreen('onboarding') }
-  function startScenario(actorKey, scenario) { setSelected({ actorKey, scenario }); setScreen('briefing') }
-  function enterChat() { setChatKey((key) => key + 1); setScreen('chat') }
 
-  function endChat(result, messages) {
-    setEvaluation(result)
-    const record = {
-      id: Date.now(), ts: new Date().toISOString(),
-      actor: actors[selected.actorKey].label,
-      persona: actors[selected.actorKey].persona.name,
-      scenario: selected.scenario.title,
-      score: result.score, turns: result.turns,
-      weakestSkill: result.weakestSkill,
-      dimensions: result.dimensions,
-      learningStage: 'reviewed',
-      messages,
+  useEffect(() => {
+    let active = true
+    async function bootstrap() {
+      if (!userId) {
+        if (active) setScreen('onboarding')
+        return
+      }
+      try {
+        const [user] = await Promise.all([bridgeApi.getUser(userId), loadCatalog()])
+        if (!active) return
+        const savedProfile = profileFromUser(user)
+        setProfile(savedProfile)
+        setScreen(savedProfile ? 'home' : 'onboarding')
+      } catch (requestError) {
+        if (!active) return
+        setError(requestError.message)
+        setScreen('error')
+      }
     }
-    saveHistory(record)
-    if (profile) persistProfile({ ...profile, focusSkill: result.weakestSkill })
+    bootstrap()
+    return () => { active = false }
+  }, [])
+
+  async function finishOnboarding(localProfile) {
+    setError('')
+    let currentUserId = userId
+    if (!currentUserId) {
+      const user = await bridgeApi.createAnonymousUser('Learner')
+      currentUserId = user.id
+      localStorage.setItem(USER_KEY, currentUserId)
+      setUserId(currentUserId)
+    }
+
+    const result = await bridgeApi.saveOnboarding(currentUserId, {
+      displayName: 'Learner',
+      countryOfOrigin: localProfile.origin,
+      usExperience: localProfile.time,
+      classroomComfort: localProfile.ratings.class,
+      disagreementComfort: localProfile.ratings.disagree,
+      smallTalkComfort: localProfile.ratings.smalltalk,
+      hardestActorType: actorTypeFor(localProfile.recommended),
+    })
+    await loadCatalog()
+    setProfile({
+      ...localProfile,
+      displayName: 'Learner',
+      confidence: result.baselineConfidence,
+      baselineConfidence: result.baselineConfidence,
+      recommended: actorKeyFor(result.recommendedActorType),
+    })
+    setScreen('home')
+  }
+
+  function retake() {
+    setError('')
+    setScreen('onboarding')
+  }
+
+  function startScenario(actorKey, scenario) {
+    setSelected({ actorKey, actor: catalog[actorKey], scenario, directness: 3 })
+    setScreen('briefing')
+  }
+
+  async function enterChat(directness = selected?.directness || 3) {
+    if (!selected || !userId) return
+    setError('')
+    setScreen('starting')
+    try {
+      const nextSession = await bridgeApi.createSession({
+        userId,
+        actorId: selected.actor.id,
+        scenarioId: selected.scenario.id,
+        directnessLevel: directness,
+      })
+      setSelected((current) => ({ ...current, directness }))
+      setSession(nextSession)
+      setScreen('chat')
+    } catch (requestError) {
+      setError(requestError.message)
+      setScreen('briefing')
+    }
+  }
+
+  function endChat(result) {
+    setEvaluation(result)
     setScreen('debrief')
   }
 
-  function completeQuiz(newConfidence, correct, nextScreen = 'home') {
-    if (profile) persistProfile({
-      ...profile,
-      confidence: newConfidence,
-      focusSkill: evaluation?.weakestSkill || profile.focusSkill,
-      lastQuiz: { correct, skill: evaluation?.weakestSkill, ts: new Date().toISOString() },
-    })
+  function completeQuiz(result, nextScreen = 'home') {
+    setProfile((current) => current ? { ...current, confidence: result.confidenceAfter } : current)
     setScreen(nextScreen)
   }
 
+  if (screen === 'loading') return <StatusScreen title="Loading your practice space" />
+  if (screen === 'error') return <StatusScreen title="Bridge could not reach the API" message={error} action={() => window.location.reload()} />
   if (screen === 'onboarding') return <Onboarding onDone={finishOnboarding} />
-  const actor = selected ? actors[selected.actorKey] : null
 
+  const actor = selected?.actor
   return <div className="app">
-    <Sidebar activeNav={screen === 'progress' ? 'progress' : 'home'} onNav={(key) => setScreen(key)} />
+    <Sidebar activeNav={screen === 'progress' ? 'progress' : 'home'} onNav={(key) => { setError(''); setScreen(key) }} />
     <main className="content">
-      {screen === 'home' && <Home profile={profile} onStart={startScenario} onRetake={retake} />}
-      {screen === 'progress' && <Progress profile={profile} onContinue={() => setScreen('home')} />}
+      {error && <div className="error-banner" role="alert">{error}</div>}
+      {screen === 'starting' && <StatusScreen title="Preparing the conversation" compact />}
+      {screen === 'home' && <Home profile={profile} catalog={catalog} onStart={startScenario} onRetake={retake} />}
+      {screen === 'progress' && <Progress userId={userId} onContinue={() => setScreen('home')} />}
       {screen === 'briefing' && actor && <Briefing actor={actor} scenario={selected.scenario} onBack={() => setScreen('home')} onStart={enterChat} />}
-      {screen === 'chat' && actor && <Chat key={chatKey} actor={actor} scenario={selected.scenario} onEnd={endChat} />}
-      {screen === 'debrief' && actor && <Debrief actor={actor} scenario={selected.scenario} evaluation={evaluation} onChallenge={() => setScreen('challenge')} onQuiz={() => setScreen('quiz')} onAgain={enterChat} onHome={() => setScreen('home')} />}
-      {screen === 'quiz' && <Quiz profile={profile} weakness={evaluation?.weakestSkill || profile?.focusSkill} onDone={(c, q) => completeQuiz(c, q)} onPractice={(c, q) => { completeQuiz(c, q, 'chat'); setChatKey((key) => key + 1) }} />}
+      {screen === 'chat' && actor && session && <Chat actor={actor} scenario={selected.scenario} session={session} onEnd={endChat} />}
+      {screen === 'debrief' && actor && <Debrief actor={actor} scenario={selected.scenario} evaluation={evaluation} onChallenge={() => setScreen('challenge')} onQuiz={() => setScreen('quiz')} onAgain={() => enterChat(selected.directness)} onHome={() => setScreen('home')} />}
+      {screen === 'quiz' && session && <Quiz profile={profile} sessionId={session.id} weakness={evaluation?.weakestSkill} onDone={(result) => completeQuiz(result)} onPractice={async (result) => { completeQuiz(result, 'starting'); await enterChat(selected.directness) }} />}
       {screen === 'challenge' && <Challenge actor={actor} onBack={() => setScreen('home')} />}
     </main>
+  </div>
+}
+
+function StatusScreen({ title, message, action, compact = false }) {
+  return <div className={compact ? 'status-screen compact' : 'status-screen'}>
+    <div className="status-pulse" />
+    <h1>{title}</h1>
+    {message && <p>{message}</p>}
+    {action && <button className="btn-primary" onClick={action}>Try again</button>}
   </div>
 }

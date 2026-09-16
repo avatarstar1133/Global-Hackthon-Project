@@ -20,4 +20,19 @@ public sealed class OpenAiResponsesClient(HttpClient client, IOptions<OpenAiOpti
         throw new InvalidOperationException("AI response did not contain text.");
     }
 }
-public static class AiJson { public static T Parse<T>(string value) => JsonSerializer.Deserialize<T>(value.Trim(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new InvalidOperationException("AI returned invalid JSON."); }
+public static class AiJson
+{
+    public static T Parse<T>(string value)
+    {
+        var json = value.Trim();
+        if (json.StartsWith("```", StringComparison.Ordinal))
+        {
+            var firstLineEnd = json.IndexOf('\n');
+            var lastFence = json.LastIndexOf("```", StringComparison.Ordinal);
+            if (firstLineEnd >= 0 && lastFence > firstLineEnd)
+                json = json[(firstLineEnd + 1)..lastFence].Trim();
+        }
+        return JsonSerializer.Deserialize<T>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new InvalidOperationException("AI returned invalid JSON.");
+    }
+}

@@ -9,6 +9,8 @@ export default function Onboarding({ onDone }) {
   const [i, setI] = useState(0)
   const [ans, setAns] = useState({})
   const [showResult, setShowResult] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
 
   const set = (id, val) => {
     const next = { ...ans, [id]: val }
@@ -25,7 +27,17 @@ export default function Onboarding({ onDone }) {
     const confidence = Math.max(1, Math.round((avg / 4) * 5))
     const rec = ans.hardest || 'friends'
     const profile = { origin: ans.origin, time: ans.time, confidence, recommended: rec, ratings: ans }
-    return <Result profile={profile} onDone={() => onDone(profile)} />
+    return <Result profile={profile} submitting={submitting} error={error} onDone={async () => {
+      setSubmitting(true)
+      setError('')
+      try {
+        await onDone(profile)
+      } catch (requestError) {
+        setError(requestError.message)
+      } finally {
+        setSubmitting(false)
+      }
+    }} />
   }
 
   const step = steps[i]
@@ -119,7 +131,7 @@ function ActorPick({ value, onPick }) {
   )
 }
 
-function Result({ profile, onDone }) {
+function Result({ profile, onDone, submitting, error }) {
   const a = actors[profile.recommended]
   const offset = Math.round(113 * (1 - profile.confidence / 5))
   return (
@@ -150,8 +162,9 @@ function Result({ profile, onDone }) {
           <div style={{ fontSize: 14, color: '#5f564a', marginTop: 6, lineHeight: 1.5 }}>{a.about}</div>
         </div>
 
-        <button className="btn-primary" style={{ padding: 16, borderRadius: 15, fontSize: 16, justifyContent: 'center' }} onClick={onDone}>
-          Start practicing <ArrowRight size={18} />
+        {error && <div className="inline-error" role="alert">{error}</div>}
+        <button className="btn-primary" style={{ padding: 16, borderRadius: 15, fontSize: 16, justifyContent: 'center' }} onClick={onDone} disabled={submitting}>
+          {submitting ? 'Saving your check-in…' : 'Start practicing'} {!submitting && <ArrowRight size={18} />}
         </button>
       </div>
     </div>
@@ -159,6 +172,6 @@ function Result({ profile, onDone }) {
 }
 
 const wrap = {
-  minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center',
   padding: '40px 24px', background: 'var(--bg)',
 }

@@ -36,13 +36,13 @@ public sealed class PromptBuilder
             "You are a role-play partner helping an international student practice communication in common United States settings.",
             "Stay in character. Be realistic and psychologically safe. Never diagnose the learner or stereotype any culture.",
             "Keep responses concise, ask at most one question, and do not coach inside character dialogue.",
-            $"Character: ${actor.Name}, ${actor.Role}. Personality: ${actor.Personality}. Style: ${actor.CommunicationStyle}",
-            $"Scenario: ${scenario.Title}. Situation: ${scenario.Description}",
-            $"Learner goal: ${scenario.Goal}",
-            $"Scenario behavior: ${scenario.PromptInstructions}",
-            $"Directness level: ${directnessLevel} out of 5.",
+            $"Character: {actor.Name}, {actor.Role}. Personality: {actor.Personality}. Style: {actor.CommunicationStyle}",
+            $"Scenario: {scenario.Title}. Situation: {scenario.Description}",
+            $"Learner goal: {scenario.Goal}",
+            $"Scenario behavior: {scenario.PromptInstructions}",
+            $"Directness level: {directnessLevel} out of 5.",
             "At 1 gently clarify indirect statements; at 3 act typically supportive; at 5 expect clear communication without becoming rude.",
-            $"Learner confidence: ${profile.CurrentConfidence}/5. Focus: communication with ${profile.HardestActorType}s.",
+            $"Learner confidence: {profile.CurrentConfidence}/5. Focus: communication with {profile.HardestActorType}s.",
             "Return only JSON with keys: reply, cultureNoteType, cultureNote, goalProgress.",
             "goalProgress is an integer from 0 to 100.");
     }
@@ -55,15 +55,15 @@ public sealed class PromptBuilder
     {
         var transcript = string.Join(
             Environment.NewLine,
-            messages.OrderBy(x => x.SequenceNumber).Select(x => $"${x.Role}: ${x.Content}"));
+            messages.OrderBy(x => x.SequenceNumber).Select(x => $"{x.Role}: {x.Content}"));
 
         return string.Join(Environment.NewLine,
             "You are an intercultural communication coach evaluating a completed role-play.",
             "Use only transcript evidence. Do not diagnose personality, anxiety or mental health.",
             "Ignore minor grammar unless meaning is blocked.",
-            $"Actor: ${actor.Name} (${actor.ActorType}).",
-            $"Scenario: ${scenario.Title}. Goal: ${scenario.Goal}.",
-            $"Baseline confidence: ${profile.BaselineConfidence}/5.",
+            $"Actor: {actor.Name} ({actor.ActorType}).",
+            $"Scenario: {scenario.Title}. Goal: {scenario.Goal}.",
+            $"Baseline confidence: {profile.BaselineConfidence}/5.",
             "Transcript:",
             transcript,
             "Return only JSON with integer scores 1-5 and these keys:",
