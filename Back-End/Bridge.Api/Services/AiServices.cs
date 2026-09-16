@@ -4,7 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 namespace Bridge.Api.Services;
 
-public sealed class OpenAiOptions { public string ApiKey { get; set; } = ""; public string Model { get; set; } = "gpt-5-mini"; public string BaseUrl { get; set; } = "https://api.openai.com/v1/"; }
+public sealed class OpenAiOptions { public string ApiKey { get; set; } = ""; public string Model { get; set; } = "gpt-5.6-luna"; public string BaseUrl { get; set; } = "https://api.openai.com/v1/"; }
 public interface IAiClient { Task<string> GenerateAsync(string instructions, string input, CancellationToken ct); }
 public sealed class OpenAiResponsesClient(HttpClient client, IOptions<OpenAiOptions> options) : IAiClient
 {

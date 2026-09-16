@@ -201,7 +201,7 @@ public static class BridgeEndpoints
                 Content = request.Content.Trim(),
                 SequenceNumber = next
             };
-            session.Messages.Add(userMessage);
+            db.Messages.Add(userMessage);
             await db.SaveChangesAsync(ct);
 
             var transcript = string.Join("\n", session.Messages.OrderBy(x => x.SequenceNumber)
@@ -221,7 +221,7 @@ public static class BridgeEndpoints
                 CultureNoteType = result.CultureNoteType,
                 CultureNote = result.CultureNote
             };
-            session.Messages.Add(actorMessage);
+            db.Messages.Add(actorMessage);
             await db.SaveChangesAsync(ct);
             return Results.Ok(new
             {
@@ -281,6 +281,7 @@ public static class BridgeEndpoints
                 Summary = result.Summary,
                 ModelName = options.Value.Model
             };
+            db.SessionEvaluations.Add(evaluation);
             session.Evaluation = evaluation;
             session.Status = "completed";
             session.CompletedAt = DateTimeOffset.UtcNow;
