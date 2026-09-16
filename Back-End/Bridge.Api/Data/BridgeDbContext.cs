@@ -31,6 +31,8 @@ public sealed class BridgeDbContext(DbContextOptions<BridgeDbContext> options) :
         b.Entity<PracticeSession>().HasOne(x => x.User).WithMany(x => x.Sessions).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<PracticeSession>().HasOne(x => x.Actor).WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<PracticeSession>().HasOne(x => x.Scenario).WithMany().HasForeignKey(x => x.ScenarioId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<PracticeSession>().Property(x => x.QuizGenerationModel).HasMaxLength(100);
+        b.Entity<PracticeSession>().Property(x => x.QuizGenerationPromptVersion).HasMaxLength(50);
         b.Entity<ChatMessage>().HasIndex(x => new { x.SessionId, x.SequenceNumber }).IsUnique();
         b.Entity<ChatMessage>().HasIndex(x => new { x.SessionId, x.ClientMessageId }).IsUnique().HasFilter("[ClientMessageId] IS NOT NULL");
         b.Entity<ChatMessage>().Property(x => x.Content).HasMaxLength(4000);
@@ -39,6 +41,8 @@ public sealed class BridgeDbContext(DbContextOptions<BridgeDbContext> options) :
         b.Entity<SessionEvaluation>().HasOne(x => x.Session).WithOne(x => x.Evaluation).HasForeignKey<SessionEvaluation>(x => x.SessionId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<QuizAttempt>().HasOne(x => x.Session).WithMany(x => x.QuizAttempts).HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<QuizAttempt>().HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<QuizAttempt>().Property(x => x.EvaluationModel).HasMaxLength(100);
+        b.Entity<QuizAttempt>().Property(x => x.EvaluationPromptVersion).HasMaxLength(50);
 
         b.Entity<AssessmentDefinition>().Property(x => x.Id).HasMaxLength(100);
         b.Entity<AssessmentDefinition>().Property(x => x.Name).HasMaxLength(200);

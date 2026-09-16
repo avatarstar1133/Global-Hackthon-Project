@@ -475,25 +475,190 @@ public static class BridgeEndpoints
             return Results.Ok(ToEvaluation(evaluation));
         });
 
-        api.MapPost("/sessions/{id:guid}/quiz", async (Guid id, BridgeDbContext db, CancellationToken ct) =>
+        api.MapPost("/sessions/{id:guid}/quiz", async (
+            Guid id,
+            BridgeDbContext db,
+            QuizGenPromptProvider promptProvider,
+            AdaptiveQuizService quizService,
+            IAiClient ai,
+            Microsoft.Extensions.Options.IOptions<OpenAiOptions> aiOptions,
+            ILoggerFactory loggerFactory,
+            CancellationToken ct) =>
         {
-            var session = await db.PracticeSessions.Include(x => x.Actor)
-                .SingleOrDefaultAsync(x => x.Id == id, ct);
-            if (session is null) return Results.NotFound();
-            var questions = QuizCatalog.ForActor(session.Actor.ActorType);
-            return Results.Ok(questions.Select((x, index) => new { id = index, x.Prompt, x.Options }));
-        });
-
-        api.MapPost("/sessions/{id:guid}/quiz/submit", async (Guid id, SubmitQuizRequest request, BridgeDbContext db, CancellationToken ct) =>
-        {
-            var session = await db.PracticeSessions.Include(x => x.Actor).Include(x => x.User).ThenInclude(x => x.Profile)
+            const int requestedCount = 5;
+            var session = await db.PracticeSessions
+                .Include(x => x.Actor)
+                .Include(x => x.Scenario)
+                .Include(x => x.Evaluation)
+                .Include(x => x.Messages)
+                .Include(x => x.User).ThenInclude(x => x.Profile)
                 .SingleOrDefaultAsync(x => x.Id == id, ct);
             if (session?.User.Profile is null) return Results.NotFound();
-            var questions = QuizCatalog.ForActor(session.Actor.ActorType);
-            if (request.Answers.Count != questions.Count || request.ConfidenceAfter is < 1 or > 5)
-                return Results.BadRequest(new { error = "Invalid quiz submission." });
+            if (session.Evaluation is null)
+                return Results.Conflict(new { error = "Complete and evaluate the chat before generating a quiz." });
 
-            var score = questions.Select((x, index) => x.CorrectIndex == request.Answers[index] ? 1 : 0).Sum();
+            AdaptiveQuizSnapshot? snapshot = null;
+            if (!string.IsNullOrWhiteSpace(session.GeneratedQuizJson))
+            {
+                try
+                {
+                    snapshot = JsonSerializer.Deserialize<AdaptiveQuizSnapshot>(
+                        session.GeneratedQuizJson,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+                catch (JsonException)
+                {
+                    snapshot = null;
+                }
+            }
+
+            if (snapshot is null)
+            {
+                snapshot = quizService.CreateStaticFallback(session.Actor.ActorType);
+                var systemPrompt = promptProvider.GetSystemPrompt();
+
+                if (!string.IsNullOrWhiteSpace(systemPrompt) && !string.IsNullOrWhiteSpace(aiOptions.Value.ApiKey))
+                {
+                    try
+                    {
+                        var latestPersonaJson = await db.PersonaAnalyses.AsNoTracking()
+                            .Where(x => x.UserId == session.UserId)
+                            .OrderByDescending(x => x.CreatedAt)
+                            .Select(x => x.AnalysisJson)
+                            .FirstOrDefaultAsync(ct);
+
+                        var previousQuestionJson = await db.QuizAttempts.AsNoTracking()
+                            .Where(x => x.UserId == session.UserId)
+                            .OrderByDescending(x => x.CreatedAt)
+                            .Select(x => x.QuestionsJson)
+                            .Take(5)
+                            .ToListAsync(ct);
+                        var previousQuestionCodes = new HashSet<string>(StringComparer.Ordinal);
+                        foreach (var json in previousQuestionJson)
+                        {
+                            try
+                            {
+                                var previousQuestions = JsonSerializer.Deserialize<List<QuizQuestion>>(json) ?? [];
+                                foreach (var code in previousQuestions.Select(x => x.QuestionCode).Where(x => !string.IsNullOrWhiteSpace(x)))
+                                    previousQuestionCodes.Add(code!);
+                            }
+                            catch (JsonException)
+                            {
+                                // Older quiz snapshots may not contain the current shape.
+                            }
+                        }
+
+                        var staticQuestionBank = QuizCatalog.ForActor(session.Actor.ActorType);
+                        var input = JsonSerializer.Serialize(new
+                        {
+                            requested_question_count = requestedCount,
+                            persona_profile = ParsePersona(latestPersonaJson ?? "") ?? new
+                            {
+                                primary_goal = session.User.Profile.HardestActorType,
+                                confidence_baseline = session.User.Profile.BaselineConfidence,
+                                confidence_current = session.User.Profile.CurrentConfidence,
+                                classroom_comfort = session.User.Profile.ClassroomComfort,
+                                disagreement_comfort = session.User.Profile.DisagreementComfort,
+                                small_talk_comfort = session.User.Profile.SmallTalkComfort
+                            },
+                            chat_transcript = string.Join(
+                                "\n",
+                                session.Messages.OrderBy(x => x.SequenceNumber).Select(x => x.Role + ": " + x.Content)),
+                            session_evaluation = ToEvaluation(session.Evaluation),
+                            scenario = new
+                            {
+                                actor_type = session.Actor.ActorType,
+                                session.Scenario.Title,
+                                session.Scenario.Goal,
+                                session.Scenario.CultureContext
+                            },
+                            quiz_question_bank = staticQuestionBank.Select((question, index) => new
+                            {
+                                question_code = "STATIC-BANK-" + (index + 1),
+                                prompt = question.Prompt,
+                                options = question.Options.Select((text, optionIndex) => new
+                                {
+                                    key = ((char)('A' + optionIndex)).ToString(),
+                                    text
+                                }),
+                                correct_option = ((char)('A' + question.CorrectIndex)).ToString(),
+                                explanation = question.Explanation,
+                                skill_tag = question.SkillTag
+                            }),
+                            previously_seen_question_codes = previousQuestionCodes
+                        });
+
+                        var raw = await ai.GenerateAsync(systemPrompt, input, ct);
+                        snapshot = quizService.ParseAndValidate(raw, requestedCount);
+                    }
+                    catch (Exception exception)
+                    {
+                        loggerFactory.CreateLogger("QuizGeneration")
+                            .LogError(exception, "Adaptive quiz generation failed for session {SessionId}; using static fallback.", session.Id);
+                    }
+                }
+
+                session.GeneratedQuizJson = JsonSerializer.Serialize(snapshot);
+                session.QuizGenerationModel = snapshot.Source == "ai" ? aiOptions.Value.Model : null;
+                session.QuizGenerationPromptVersion = snapshot.Source == "ai" ? promptProvider.PromptVersion : null;
+                session.QuizGeneratedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(ct);
+            }
+
+            var studentQuiz = quizService.CreateStudentResponse(snapshot);
+            return Results.Ok(studentQuiz.Questions.Select((question, index) => new
+            {
+                id = index,
+                question.QuestionCode,
+                question.Prompt,
+                options = question.Options.Select(option => option.Text),
+                question.SkillTag,
+                question.Difficulty,
+                question.ScenarioContext,
+                question.IsReinforcement,
+                source = studentQuiz.Source
+            }));
+        });
+
+        api.MapPost("/sessions/{id:guid}/quiz/submit", async (
+            Guid id,
+            SubmitQuizRequest request,
+            BridgeDbContext db,
+            AdaptiveQuizService quizService,
+            CancellationToken ct) =>
+        {
+            var session = await db.PracticeSessions
+                .Include(x => x.User).ThenInclude(x => x.Profile)
+                .SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (session?.User.Profile is null) return Results.NotFound();
+            if (string.IsNullOrWhiteSpace(session.GeneratedQuizJson))
+                return Results.Conflict(new { error = "Generate the quiz before submitting answers." });
+            if (request.ConfidenceAfter is < 1 or > 5)
+                return Results.BadRequest(new { error = "ConfidenceAfter must be between 1 and 5." });
+
+            AdaptiveQuizSnapshot snapshot;
+            AdaptiveQuizScoreResult result;
+            try
+            {
+                snapshot = JsonSerializer.Deserialize<AdaptiveQuizSnapshot>(
+                    session.GeneratedQuizJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? throw new InvalidOperationException("Stored quiz is invalid.");
+                result = quizService.Score(snapshot, request.Answers);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+            catch (JsonException)
+            {
+                return Results.Conflict(new { error = "Stored quiz is invalid. Generate it again." });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new { error = exception.Message });
+            }
+
             var before = session.User.Profile.CurrentConfidence;
             session.User.Profile.CurrentConfidence = request.ConfidenceAfter;
             session.User.Profile.UpdatedAt = DateTimeOffset.UtcNow;
@@ -501,29 +666,124 @@ public static class BridgeEndpoints
             {
                 UserId = session.UserId,
                 SessionId = session.Id,
-                QuestionsJson = JsonSerializer.Serialize(questions),
+                QuestionsJson = JsonSerializer.Serialize(result.Questions),
                 AnswersJson = JsonSerializer.Serialize(request.Answers),
-                Score = score,
-                MaxScore = questions.Count,
+                Score = result.Score,
+                MaxScore = result.MaxScore,
                 ConfidenceBefore = before,
                 ConfidenceAfter = request.ConfidenceAfter
             });
             await db.SaveChangesAsync(ct);
+
             return Results.Ok(new
             {
-                score,
-                maxScore = questions.Count,
+                score = result.Score,
+                maxScore = result.MaxScore,
                 confidenceBefore = before,
                 confidenceAfter = request.ConfidenceAfter,
-                knowledgeImproved = score >= 2,
+                knowledgeImproved = result.Score >= Math.Ceiling(result.MaxScore * 0.6),
                 confidenceIncreased = request.ConfidenceAfter > before,
-                answers = questions.Select((x, index) => new
+                answers = result.Questions.Select((question, index) => new
                 {
-                    correct = request.Answers[index] == x.CorrectIndex,
-                    x.CorrectIndex,
-                    x.Explanation
+                    correct = request.Answers[index] == question.CorrectIndex,
+                    question.CorrectIndex,
+                    question.Explanation,
+                    question.QuestionCode,
+                    question.SkillTag
                 })
             });
+        });
+
+        // Post-quiz AI evaluation: combine the quiz result with the persona profile
+        // and prior sessions, then route the next session. Runs only when the
+        // evaluator prompt and an API key are configured; otherwise returns pending.
+        api.MapPost("/sessions/{id:guid}/quiz/evaluation", async (
+            Guid id,
+            BridgeDbContext db,
+            PostQuizPromptProvider promptProvider,
+            IAiClient ai,
+            Microsoft.Extensions.Options.IOptions<OpenAiOptions> aiOptions,
+            ILoggerFactory loggerFactory,
+            CancellationToken ct) =>
+        {
+            var session = await db.PracticeSessions
+                .Include(x => x.Actor)
+                .Include(x => x.User).ThenInclude(x => x.Profile)
+                .Include(x => x.Evaluation)
+                .Include(x => x.QuizAttempts)
+                .SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (session?.User.Profile is null) return Results.NotFound();
+
+            var attempt = session.QuizAttempts.OrderByDescending(x => x.CreatedAt).FirstOrDefault();
+            if (attempt is null) return Results.BadRequest(new { error = "Complete a quiz before evaluation." });
+            if (attempt.EvaluationJson is not null)
+                return Results.Ok(new { status = "analyzed", evaluation = ParsePersona(attempt.EvaluationJson) });
+
+            var systemPrompt = promptProvider.GetSystemPrompt();
+            if (string.IsNullOrWhiteSpace(systemPrompt) || string.IsNullOrWhiteSpace(aiOptions.Value.ApiKey))
+                return Results.Ok(new { status = "pending" });
+
+            var profile = session.User.Profile;
+            var questions = JsonSerializer.Deserialize<List<QuizQuestion>>(attempt.QuestionsJson) ?? [];
+            var answers = JsonSerializer.Deserialize<List<int>>(attempt.AnswersJson) ?? [];
+            var priorSessions = await db.PracticeSessions.AsNoTracking()
+                .Where(x => x.UserId == session.UserId && x.Id != session.Id && x.Evaluation != null)
+                .Include(x => x.Evaluation)
+                .OrderByDescending(x => x.CompletedAt).Take(5)
+                .ToListAsync(ct);
+
+            var input = JsonSerializer.Serialize(new
+            {
+                derived_profile = new
+                {
+                    baseline_confidence = profile.BaselineConfidence,
+                    current_confidence = profile.CurrentConfidence,
+                    hardest_actor = profile.HardestActorType,
+                    classroom_comfort = profile.ClassroomComfort,
+                    disagreement_comfort = profile.DisagreementComfort,
+                    small_talk_comfort = profile.SmallTalkComfort,
+                    session_focus_skill = session.Evaluation is null ? null : LearningResourceCatalog.WeakestSkill(session.Evaluation)
+                },
+                quiz_result = new
+                {
+                    actor_type = session.Actor.ActorType,
+                    score = attempt.Score,
+                    max_score = attempt.MaxScore,
+                    questions = questions.Select((q, index) => new
+                    {
+                        prompt = q.Prompt,
+                        skill_tag = q.SkillTag,
+                        selected_answer = index < answers.Count && answers[index] >= 0 && answers[index] < q.Options.Count ? q.Options[answers[index]] : null,
+                        correct_answer = q.Options.Count > q.CorrectIndex ? q.Options[q.CorrectIndex] : null,
+                        is_correct = index < answers.Count && answers[index] == q.CorrectIndex,
+                        explanation = q.Explanation
+                    })
+                },
+                previous_session_data = priorSessions.Select(x => new
+                {
+                    overall_score = x.Evaluation!.OverallScore,
+                    weak_skill = LearningResourceCatalog.WeakestSkill(x.Evaluation),
+                    completed_at = x.CompletedAt
+                })
+            });
+
+            try
+            {
+                var raw = await ai.GenerateAsync(systemPrompt, input, ct);
+                var evaluationJson = ExtractJson(raw);
+                attempt.EvaluationJson = evaluationJson;
+                attempt.EvaluationModel = aiOptions.Value.Model;
+                attempt.EvaluationPromptVersion = promptProvider.PromptVersion;
+                attempt.EvaluatedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(ct);
+                return Results.Ok(new { status = "analyzed", evaluation = ParsePersona(evaluationJson) });
+            }
+            catch (Exception exception)
+            {
+                loggerFactory.CreateLogger("PostQuizEvaluation")
+                    .LogError(exception, "Post-quiz evaluation failed for session {SessionId}", session.Id);
+                return Results.Ok(new { status = "failed" });
+            }
         });
 
         api.MapGet("/progress/{userId:guid}", async (Guid userId, BridgeDbContext db, CancellationToken ct) =>

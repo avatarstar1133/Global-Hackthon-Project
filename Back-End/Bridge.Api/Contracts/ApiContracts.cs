@@ -14,7 +14,13 @@ public sealed record ChatAiResult(string Reply, string? CultureNoteType, string?
 public sealed record FeedbackItem(string Title, string Evidence, string? Suggestion);
 public sealed record CultureGap(string Original, string Alternative, string Explanation);
 public sealed record EvaluationAiResult(int OverallScore, int Clarity, int Directness, int Warmth, int Engagement, int GoalCompletion, IReadOnlyList<FeedbackItem> Strengths, IReadOnlyList<FeedbackItem> Improvements, CultureGap CultureGap, [property: JsonConverter(typeof(FlexibleSummaryJsonConverter))] string Summary);
-public sealed record QuizQuestion(string Prompt, IReadOnlyList<string> Options, int CorrectIndex, string Explanation);
+public sealed record QuizQuestion(string Prompt, IReadOnlyList<string> Options, int CorrectIndex, string Explanation)
+{
+    public string? QuestionCode { get; init; }
+    public string? SkillTag { get; init; }
+    public string? Difficulty { get; init; }
+    public string? ScenarioContext { get; init; }
+}
 
 // Persona assessment submission.
 public sealed record PersonaAnswerInput(string QuestionId, IReadOnlyList<string>? SelectedValues, int? ScaleValue);

@@ -13,8 +13,13 @@ builder.Services.AddSingleton<OnboardingAssessmentService>();
 builder.Services.AddSingleton<PromptBuilder>();
 builder.Services.AddSingleton<PersonaAssessmentService>();
 builder.Services.AddSingleton<PersonaPromptProvider>();
+builder.Services.AddSingleton<PostQuizPromptProvider>();
+builder.Services.AddSingleton<QuizGenPromptProvider>();
+builder.Services.AddSingleton<AdaptiveQuizService>();
 builder.Services.Configure<OpenAiOptions>(builder.Configuration.GetSection("OpenAI"));
 builder.Services.Configure<PersonaAnalysisOptions>(builder.Configuration.GetSection("PersonaAnalysis"));
+builder.Services.Configure<PostQuizEvaluationOptions>(builder.Configuration.GetSection("PostQuizEvaluation"));
+builder.Services.Configure<QuizGenerationOptions>(builder.Configuration.GetSection("QuizGeneration"));
 builder.Services.AddHttpClient<IAiClient, OpenAiResponsesClient>((sp, client) =>
 {
     var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<OpenAiOptions>>().Value;
