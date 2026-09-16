@@ -1,36 +1,41 @@
-// Evaluate a whole conversation from its messages.
-// Deterministic heuristics for the MVP — this is the seam where a real
-// Claude-API evaluation will plug in later.
-
 export function evaluate(messages, actorName = 'them') {
   const userMsgs = messages.filter((m) => m.who === 'me')
   const turns = userMsgs.length
   const hints = messages.filter((m) => m.who === 'tip').length
-  const avgLen = turns ? Math.round(userMsgs.reduce((a, m) => a + m.text.length, 0) / turns) : 0
+  const avgLen = turns ? Math.round(userMsgs.reduce((sum, m) => sum + m.text.length, 0) / turns) : 0
   const askedQuestion = userMsgs.some((m) => m.text.includes('?'))
+  const hedges = userMsgs.filter((m) => /\b(maybe|perhaps|sorry|if possible|i think maybe)\b/i.test(m.text)).length
 
+  const dimensions = {
+    clarity: clamp(1 + (avgLen >= 20 ? 1 : 0) + (avgLen >= 45 ? 1 : 0) + (turns >= 2 ? 1 : 0)),
+    directness: clamp(4 - Math.min(2, hedges) + (avgLen >= 25 ? 1 : 0)),
+    warmth: clamp(2 + (askedQuestion ? 1 : 0) + (avgLen >= 35 ? 1 : 0)),
+    engagement: clamp(1 + Math.min(3, turns) + (askedQuestion ? 1 : 0)),
+    goalCompletion: clamp(1 + Math.min(3, turns) + (avgLen >= 40 ? 1 : 0)),
+  }
+
+  const weakestSkill = Object.entries(dimensions).sort((a, b) => a[1] - b[1])[0][0]
   const strengths = []
   const toTry = []
 
   if (turns >= 3) strengths.push('You kept the conversation going for several turns.')
-  else if (turns > 0) toTry.push('Try staying in the conversation a little longer next time.')
+  else if (turns > 0) toTry.push('Stay in the conversation for one more turn next time.')
 
-  if (askedQuestion) strengths.push(`You asked ${actorName} a question back — a natural way to connect.`)
-  else toTry.push('Try asking a question back to keep the other person talking.')
+  if (askedQuestion) strengths.push(`You asked ${actorName} a question back   a natural way to connect.`)
+  else toTry.push('Ask a related question back to keep the exchange moving.')
 
-  if (avgLen >= 40) strengths.push('Your replies had enough detail to feel warm and open.')
-  else toTry.push('Add a bit more detail or a personal note so replies feel less distant.')
+  if (avgLen >= 40) strengths.push('Your replies included enough detail to feel open and clear.')
+  else toTry.push('Add one specific detail so the other person knows how to respond.')
 
-  if (hints === 0 && turns > 0) strengths.push('You spoke up on your own, without leaning on hints.')
+  if (hedges > 0) toTry.push('State the main request or opinion before apologizing or softening it.')
+  if (hints === 0 && turns > 0) strengths.push('You spoke up without relying on hints.')
+  if (!strengths.length) strengths.push("You showed up and tried   that is the first rep.")
+  if (!toTry.length) toTry.push('Keep practicing the same skill in a slightly harder scenario.')
 
-  if (strengths.length === 0) strengths.push("You showed up and tried — that's the hardest part.")
-  if (toTry.length === 0) toTry.push('Keep experimenting with sharing a little more of yourself.')
+  const score = clamp(Math.round(Object.values(dimensions).reduce((a, b) => a + b, 0) / 5))
+  return { turns, hints, avgLen, askedQuestion, strengths, toTry, score, dimensions, weakestSkill }
+}
 
-  let score = 2
-  if (turns >= 2) score += 1
-  if (askedQuestion) score += 1
-  if (avgLen >= 40) score += 1
-  score = Math.max(1, Math.min(5, score))
-
-  return { turns, hints, avgLen, askedQuestion, strengths, toTry, score }
+function clamp(value) {
+  return Math.max(1, Math.min(5, value))
 }

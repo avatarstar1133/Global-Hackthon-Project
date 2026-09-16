@@ -30,3 +30,18 @@ Thumbs.db
 bin/
 obj/
 *.user
+# SQL Server / local databases
+*.mdf
+*.ldf
+*.bak
+*.db
+*.db-shm
+*.db-wal
+
+# Local secrets
+**/secrets.json
+appsettings.*.local.json
+
+# Visual Studio
+.vs/
+TestResults/

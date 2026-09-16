@@ -153,72 +153,9 @@ export const actors = {
     ],
   },
 
-  colleagues: {
-    key: 'colleagues',
-    label: 'Colleagues',
-    tagline: 'Coworkers & internships',
-    color: 'var(--sage)',
-    tint: 'var(--sage-tint)',
-    border: '#D5E5DA',
-    about: 'American workplaces expect proactive, direct-but-warm communication. Learn to collaborate, ask for help, and give opinions.',
-    persona: { name: 'Sarah', role: 'Teammate at your internship', initial: 'S', accent: 'var(--sage)' },
-    scenarios: [
-      {
-        id: 'c-intro', title: 'Introduce yourself to the team', desc: 'First day at your internship.', level: 'Medium',
-        scene: "It's your first day at your internship and you meet a teammate.",
-        goal: 'Introduce yourself and learn what the team is working on.',
-        opener: "Hey, welcome to the team! I'm Sarah. Excited to have you here.",
-        replies: [
-          'Nice! What are you hoping to work on?',
-          "We're building the onboarding flow right now.",
-          'Feel free to ask me anything, seriously.',
-          'Let’s grab coffee later so I can introduce you around.',
-        ],
-        culture: {
-          said: 'Nice to meet you. I will try my best.',
-          natural: "Nice to meet you, Sarah! I'm excited to jump in — what's the team focused on right now?",
-          why: 'Showing curiosity and initiative is valued on US teams, more than modesty.',
-        },
-      },
-      {
-        id: 'c-help', title: 'Ask a coworker for help', desc: "Ask clearly, don't over-apologize.", level: 'Medium',
-        scene: "You're stuck on a task and need Sarah's help.",
-        goal: 'Ask for help clearly and without over-apologizing.',
-        opener: "Hey, how's the task going?",
-        replies: [
-          'No worries at all — what part are you stuck on?',
-          "Ah, I've hit that too. Let me show you.",
-          'Happy to help, just ping me anytime.',
-          'You got this. Let me know if it works.',
-        ],
-        culture: {
-          said: "Sorry, sorry, I don't understand. Can you help me please?",
-          natural: 'Hey Sarah, I’m stuck on the login step — could you walk me through it when you have a sec?',
-          why: 'A specific ask without over-apologizing is normal and appreciated at work.',
-        },
-      },
-      {
-        id: 'c-meeting', title: 'Share a different opinion in a meeting', desc: 'Voice your view, back it up.', level: 'Hard',
-        scene: 'In a team meeting, you disagree with the proposed approach.',
-        goal: 'Voice your view respectfully and support it with a reason.',
-        opener: 'So I think we should just ship option A. Thoughts, everyone?',
-        replies: [
-          'Interesting — why do you prefer the other approach?',
-          "That's a fair point, I hadn't considered that.",
-          "Okay, let's weigh both quickly.",
-          'Good input — thanks for speaking up.',
-        ],
-        culture: {
-          said: '(staying quiet even though you disagree)',
-          natural: "I see the appeal of option A, but I'd lean toward B because it scales better.",
-          why: 'Speaking up with a reason is expected; silence can be read as having no opinion.',
-        },
-      },
-    ],
-  },
 }
 
-export const actorOrder = ['friends', 'professors', 'colleagues']
+export const actorOrder = ['friends', 'professors']
 
 // ---- Re-check quiz --------------------------------------------------------
 // A short knowledge check + self re-rating to see whether the user is
