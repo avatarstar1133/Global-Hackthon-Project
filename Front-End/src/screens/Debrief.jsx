@@ -21,21 +21,22 @@ export default function Debrief({ evaluation, onChallenge, onQuiz, onAgain, onHo
       </div>
     </div>
 
-    {result.summary && <div className="summary-callout">{result.summary}</div>}
-
-    <div className="feedback-grid">
-      <Feedback title="What you did well" items={result.strengths} color="var(--sage)" bg="var(--sage-tint)" Icon={Check} />
-      <Feedback title="Try next time" items={result.toTry} color="var(--amber)" bg="var(--amber-tint)" Icon={Plus} />
-    </div>
-
     <div className="focus-panel">
       <div className="label">Your next focus</div>
       <h2>{skillLabels[focus] || 'Conversation practice'}</h2>
+      <p>Make this the goal of your next conversation.</p>
       <div className="dimension-list">
         {Object.entries(result.dimensions || {}).map(([key, value]) => (
           <span key={key} className={key === focus ? 'focus-dimension' : ''}>{skillLabels[key] || key} <b>{value}/5</b></span>
         ))}
       </div>
+    </div>
+
+    {result.summary && <div className="summary-callout">{result.summary}</div>}
+
+    <div className="feedback-grid">
+      <Feedback title="What you did well" items={result.strengths} color="var(--sage)" bg="var(--sage-tint)" Icon={Check} />
+      <Feedback title="Try next time" items={result.toTry} color="var(--amber)" bg="var(--amber-tint)" Icon={Plus} />
     </div>
 
     <section>
@@ -68,7 +69,7 @@ export default function Debrief({ evaluation, onChallenge, onQuiz, onAgain, onHo
 
     <div className="debrief-actions">
       <button className="btn-ghost" onClick={onChallenge}>Real-world challenge</button>
-      <button className="btn-ghost" onClick={onAgain}>Practice again</button>
+      <button className="btn-ghost" onClick={onAgain}>Come back again</button>
       <button className="btn-ghost" onClick={onHome}>Home</button>
     </div>
   </div></div>
@@ -76,8 +77,16 @@ export default function Debrief({ evaluation, onChallenge, onQuiz, onAgain, onHo
 
 function Feedback({ title, items, color, bg, Icon }) {
   return <div className="feedback-block" style={{ '--feedback-color': color, '--feedback-bg': bg }}>
-    <div className="label">{title}</div>
+    <div className="feedback-title">{title}</div>
     {items.length === 0 && <div className="muted feedback-empty">No feedback was returned.</div>}
-    {items.map((item, index) => <div className="item" key={index}><span className="dot"><Icon size={12} /></span>{item}</div>)}
+    {items.map((item, index) => {
+      const [lead, ...detail] = item.split(' — ')
+      return <div className="item" key={index}>
+        <span className="dot"><Icon size={12} /></span>
+        <div className="feedback-copy">
+          {detail.length > 0 ? <><strong>{lead}</strong><span> — {detail.join(' — ')}</span></> : item}
+        </div>
+      </div>
+    })}
   </div>
 }

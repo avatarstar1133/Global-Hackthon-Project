@@ -69,6 +69,7 @@ public sealed class PromptBuilder
             "Return only JSON with integer scores 1-5 and these keys:",
             "overallScore, clarity, directness, warmth, engagement, goalCompletion, strengths, improvements, cultureGap, summary.",
             "Each feedback item has title, evidence and optional suggestion.",
-            "cultureGap has original, alternative and explanation.");
+            "cultureGap has original, alternative and explanation.",
+            "summary must be one concise plain-text string, never an object or array.");
     }
 }

@@ -45,7 +45,7 @@ export default function Onboarding({ onDone }) {
     <div style={wrap}>
       <div style={{ width: '100%', maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 26 }}>
         <div className="brand" style={{ padding: 0, justifyContent: 'center' }}>
-          <span className="mark"><Bridge size={19} /></span>Bridge
+          <span className="mark"><Bridge size={19} /></span>Lanco
         </div>
 
         {/* progress */}
@@ -73,7 +73,7 @@ export default function Onboarding({ onDone }) {
 function Choice({ q, options, value, onPick }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <h1 style={{ fontSize: 27, textAlign: 'center', lineHeight: 1.3 }}>{q}</h1>
+      <h1 className="onboarding-question">{q}</h1>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {options.map((o) => (
           <button key={o} className="card" onClick={() => onPick(o)}
@@ -89,7 +89,7 @@ function Choice({ q, options, value, onPick }) {
 function Scale({ q, value, onPick }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <h1 style={{ fontSize: 27, textAlign: 'center', lineHeight: 1.3 }}>{q}</h1>
+      <h1 className="onboarding-question">{q}</h1>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
         {scaleLabels.map((lbl, k) => {
           const v = k + 1
@@ -110,7 +110,7 @@ function Scale({ q, value, onPick }) {
 function ActorPick({ value, onPick }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <h1 style={{ fontSize: 27, textAlign: 'center', lineHeight: 1.3 }}>Which conversations feel hardest right now?</h1>
+      <h1 className="onboarding-question">Which conversations feel hardest right now?</h1>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {actorOrder.map((key) => {
           const a = actors[key]

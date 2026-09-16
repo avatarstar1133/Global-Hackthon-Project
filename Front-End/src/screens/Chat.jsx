@@ -161,14 +161,14 @@ export default function Chat({ actor, scenario, session, onEnd }) {
           </div>
         </div>
 
-        <div className="panel-disclaimer">Bridge helps you practice communication skills. It is not a substitute for professional support.</div>
+        <div className="panel-disclaimer">Lanco helps you practice communication skills. It is not a substitute for professional support.</div>
       </aside>
 
       {confirming && <div className="overlay" onClick={() => !finishing && setConfirming(false)}>
         <div className="modal" onClick={(event) => event.stopPropagation()}>
           <div className="modal-icon"><Check size={24} sw={2.4} /></div>
           <h2>Finish this conversation?</h2>
-          <p>Bridge will evaluate the complete chat with {persona.name} and save the result to your progress. You have sent {userTurns} {userTurns === 1 ? 'reply' : 'replies'}.</p>
+          <p>Lanco will evaluate the complete chat with {persona.name} and save the result to your progress. You have sent {userTurns} {userTurns === 1 ? 'reply' : 'replies'}.</p>
           <div className="row modal-actions">
             <button className="btn-ghost" onClick={() => setConfirming(false)} disabled={finishing}>Keep chatting</button>
             <button className="btn-primary" onClick={finish} disabled={finishing}>{finishing ? 'Reviewing…' : 'Yes, review it'}</button>

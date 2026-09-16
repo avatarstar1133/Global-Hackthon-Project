@@ -10,7 +10,7 @@ export const originQuestion = {
 
 export const timeQuestion = {
   id: 'time',
-  q: 'How long have you been studying in the U.S.?',
+  q: 'How long have you been studying in the United States of America?',
   options: ['I just arrived', 'Less than a semester', '1–2 semesters', 'Over a year'],
 }
 

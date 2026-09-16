@@ -38,7 +38,7 @@ export default function Progress({ userId, onContinue }) {
     <div className="cycle-strip">
       <div className="label">Current cycle</div>
       <div className="cycle-steps">
-        {['Practice', 'Review', 'Learn', 'Quiz', 'Practice again'].map((label, index) => <div key={label} className="cycle-step">
+        {['Practice', 'Review', 'Learn', 'Quiz', 'Come back again'].map((label, index) => <div key={label} className="cycle-step">
           <span className={cycleDone[index] ? 'complete' : ''}>{cycleDone[index] ? <Check size={14} /> : index + 1}</span>
           <b>{label}</b>
           {index < 4 && <ArrowRight size={15} />}

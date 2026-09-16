@@ -177,7 +177,7 @@ export default function App() {
   }
 
   if (screen === 'loading') return <StatusScreen title="Loading your practice space" />
-  if (screen === 'error') return <StatusScreen title="Bridge could not reach the API" message={error} action={() => window.location.reload()} />
+  if (screen === 'error') return <StatusScreen title="Lanco could not reach the API" message={error} action={() => window.location.reload()} />
   if (screen === 'onboarding') return <Onboarding onDone={finishOnboarding} />
 
   const actor = selected?.actor

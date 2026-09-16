@@ -7,7 +7,7 @@ const items = [
 
 export default function Sidebar({ activeNav, onNav }) {
   return <aside className="sidebar">
-    <div className="brand"><span className="mark"><Bridge size={19} /></span>Bridge</div>
+    <div className="brand"><span className="mark"><Bridge size={19} /></span>Lanco</div>
     <nav className="nav" aria-label="Primary navigation">
       {items.map(({ key, label, Icon }) => (
         <button key={key} className={activeNav === key ? 'active' : ''} onClick={() => onNav(key)}>
