@@ -4,6 +4,7 @@ using Bridge.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Bridge.Api.Data.Migrations
 {
     [DbContext(typeof(BridgeDbContext))]
-    partial class BridgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260916145913_AddPersonaAssessmentCatalog")]
+    partial class AddPersonaAssessmentCatalog
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -76,42 +79,6 @@ namespace Bridge.Api.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Users");
-                });
-
-            modelBuilder.Entity("Bridge.Api.Domain.AssessmentAttempt", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("AnalysisStatus")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<string>("AssessmentId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("AssessmentVersion")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssessmentId");
-
-                    b.HasIndex("UserId", "CreatedAt");
-
-                    b.ToTable("AssessmentAttempts");
                 });
 
             modelBuilder.Entity("Bridge.Api.Domain.AssessmentDefinition", b =>
@@ -239,47 +206,6 @@ namespace Bridge.Api.Data.Migrations
                     b.ToTable("AssessmentQuestions");
                 });
 
-            modelBuilder.Entity("Bridge.Api.Domain.AssessmentResponse", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("AnswerType")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
-
-                    b.Property<Guid>("AttemptId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("QuestionCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<string>("QuestionId")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
-
-                    b.Property<int?>("ScaleValue")
-                        .HasColumnType("int");
-
-                    b.Property<string>("SelectedValuesJson")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("QuestionId");
-
-                    b.HasIndex("AttemptId", "QuestionId")
-                        .IsUnique();
-
-                    b.ToTable("AssessmentResponses");
-                });
-
             modelBuilder.Entity("Bridge.Api.Domain.AssessmentSection", b =>
                 {
                     b.Property<string>("Id")
@@ -357,49 +283,6 @@ namespace Bridge.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Messages");
-                });
-
-            modelBuilder.Entity("Bridge.Api.Domain.PersonaAnalysis", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("AnalysisJson")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<Guid>("AttemptId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<string>("ModelName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("PromptVersion")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("Summary")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AttemptId")
-                        .IsUnique();
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("PersonaAnalyses");
                 });
 
             modelBuilder.Entity("Bridge.Api.Domain.PracticeSession", b =>
@@ -643,25 +526,6 @@ namespace Bridge.Api.Data.Migrations
                     b.ToTable("UserProfiles");
                 });
 
-            modelBuilder.Entity("Bridge.Api.Domain.AssessmentAttempt", b =>
-                {
-                    b.HasOne("Bridge.Api.Domain.AssessmentDefinition", "Assessment")
-                        .WithMany()
-                        .HasForeignKey("AssessmentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Bridge.Api.Domain.AppUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Assessment");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("Bridge.Api.Domain.AssessmentOption", b =>
                 {
                     b.HasOne("Bridge.Api.Domain.AssessmentQuestion", "Question")
@@ -684,25 +548,6 @@ namespace Bridge.Api.Data.Migrations
                     b.Navigation("Section");
                 });
 
-            modelBuilder.Entity("Bridge.Api.Domain.AssessmentResponse", b =>
-                {
-                    b.HasOne("Bridge.Api.Domain.AssessmentAttempt", "Attempt")
-                        .WithMany("Responses")
-                        .HasForeignKey("AttemptId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Bridge.Api.Domain.AssessmentQuestion", "Question")
-                        .WithMany()
-                        .HasForeignKey("QuestionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Attempt");
-
-                    b.Navigation("Question");
-                });
-
             modelBuilder.Entity("Bridge.Api.Domain.AssessmentSection", b =>
                 {
                     b.HasOne("Bridge.Api.Domain.AssessmentDefinition", "AssessmentDefinition")
@@ -723,17 +568,6 @@ namespace Bridge.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Session");
-                });
-
-            modelBuilder.Entity("Bridge.Api.Domain.PersonaAnalysis", b =>
-                {
-                    b.HasOne("Bridge.Api.Domain.AssessmentAttempt", "Attempt")
-                        .WithOne("Analysis")
-                        .HasForeignKey("Bridge.Api.Domain.PersonaAnalysis", "AttemptId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Attempt");
                 });
 
             modelBuilder.Entity("Bridge.Api.Domain.PracticeSession", b =>
@@ -825,13 +659,6 @@ namespace Bridge.Api.Data.Migrations
                     b.Navigation("Profile");
 
                     b.Navigation("Sessions");
-                });
-
-            modelBuilder.Entity("Bridge.Api.Domain.AssessmentAttempt", b =>
-                {
-                    b.Navigation("Analysis");
-
-                    b.Navigation("Responses");
                 });
 
             modelBuilder.Entity("Bridge.Api.Domain.AssessmentDefinition", b =>

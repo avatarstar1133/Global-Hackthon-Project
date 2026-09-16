@@ -24,6 +24,192 @@ public static class BridgeEndpoints
             return Results.Created($"/api/users/{user.Id}", new { user.Id, user.DisplayName });
         });
 
+        api.MapGet("/assessments/{id}", async (string id, BridgeDbContext db, CancellationToken ct) =>
+        {
+            var assessment = await db.AssessmentDefinitions.AsNoTracking().AsSplitQuery()
+                .Where(x => x.Id == id && x.IsActive)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.Name,
+                    x.Version,
+                    sections = x.Sections.OrderBy(section => section.Order).Select(section => new
+                    {
+                        section.Id,
+                        section.Title,
+                        section.Description,
+                        section.Order,
+                        questions = section.Questions.OrderBy(question => question.Order).Select(question => new
+                        {
+                            question.Id,
+                            question.Code,
+                            question.Prompt,
+                            question.AnswerType,
+                            question.Order,
+                            question.MinSelections,
+                            question.MaxSelections,
+                            question.ScaleMin,
+                            question.ScaleMax,
+                            question.ScaleMinLabel,
+                            question.ScaleMaxLabel,
+                            question.IsRequired,
+                            options = question.Options.OrderBy(option => option.Order).Select(option => new
+                            {
+                                option.Id,
+                                option.Value,
+                                option.Label,
+                                option.Order
+                            })
+                        })
+                    })
+                })
+                .SingleOrDefaultAsync(ct);
+
+            return assessment is null ? Results.NotFound() : Results.Ok(assessment);
+        });
+
+        // Submit a completed persona assessment: validate, persist the attempt and
+        // every answer, then (once a system prompt is configured) run AI analysis.
+        api.MapPost("/assessments/{id}/submit", async (
+            string id,
+            SubmitPersonaAssessmentRequest request,
+            BridgeDbContext db,
+            PersonaAssessmentService persona,
+            PersonaPromptProvider promptProvider,
+            IAiClient ai,
+            Microsoft.Extensions.Options.IOptions<OpenAiOptions> aiOptions,
+            ILoggerFactory loggerFactory,
+            CancellationToken ct) =>
+        {
+            var user = await db.Users.Include(x => x.Profile).SingleOrDefaultAsync(x => x.Id == request.UserId, ct);
+            if (user is null) return Results.NotFound(new { error = "User not found." });
+
+            var definition = await db.AssessmentDefinitions.AsNoTracking().AsSplitQuery()
+                .Include(x => x.Sections).ThenInclude(section => section.Questions).ThenInclude(question => question.Options)
+                .SingleOrDefaultAsync(x => x.Id == id && x.IsActive, ct);
+            if (definition is null) return Results.NotFound(new { error = "Assessment not found." });
+
+            IReadOnlyList<PersonaNormalizedAnswer> normalized;
+            try
+            {
+                normalized = persona.Validate(definition, request.Answers);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+
+            var attempt = new AssessmentAttempt
+            {
+                UserId = user.Id,
+                AssessmentId = definition.Id,
+                AssessmentVersion = definition.Version
+            };
+            foreach (var answer in normalized)
+            {
+                attempt.Responses.Add(new AssessmentResponse
+                {
+                    AttemptId = attempt.Id,
+                    QuestionId = answer.Question.Id,
+                    QuestionCode = answer.Question.Code,
+                    AnswerType = answer.Question.AnswerType,
+                    SelectedValuesJson = answer.ScaleValue.HasValue ? null : JsonSerializer.Serialize(answer.SelectedValues),
+                    ScaleValue = answer.ScaleValue
+                });
+            }
+
+            // AI persona analysis is optional: it runs only when a system prompt has
+            // been provided and an API key is configured. Otherwise the attempt is
+            // saved as "pending" so the prompt can be plugged in and re-run later.
+            PersonaAnalysis? analysis = null;
+            var systemPrompt = promptProvider.GetSystemPrompt();
+            if (!string.IsNullOrWhiteSpace(systemPrompt) && !string.IsNullOrWhiteSpace(aiOptions.Value.ApiKey))
+            {
+                try
+                {
+                    var input = persona.BuildAnalysisInput(definition, normalized);
+                    var raw = await ai.GenerateAsync(systemPrompt, input, ct);
+                    var json = ExtractJson(raw);
+                    analysis = new PersonaAnalysis
+                    {
+                        AttemptId = attempt.Id,
+                        UserId = user.Id,
+                        PromptVersion = promptProvider.PromptVersion,
+                        ModelName = aiOptions.Value.Model,
+                        AnalysisJson = json,
+                        Summary = TryReadSummary(json)
+                    };
+                    attempt.Analysis = analysis;
+                    attempt.AnalysisStatus = "analyzed";
+                }
+                catch (Exception exception)
+                {
+                    loggerFactory.CreateLogger("PersonaAssessment")
+                        .LogError(exception, "Persona analysis failed for user {UserId}", user.Id);
+                    attempt.AnalysisStatus = "failed";
+                }
+            }
+
+            // Keep the rest of the app working: upsert the user's profile from the
+            // assessment answers, enriched by the AI analysis when it is available.
+            int ScaleOf(string code) => normalized.FirstOrDefault(a => a.Question.Code == code)?.ScaleValue ?? 3;
+            string? ChoiceOf(string code) => normalized.FirstOrDefault(a => a.Question.Code == code)?.SelectedValues.FirstOrDefault();
+
+            var baseline = Math.Clamp(TryReadInt(analysis?.AnalysisJson, "confidence_baseline") ?? ScaleOf("Q2"), 1, 5);
+            var recommendedActor =
+                MapRecommendedActor(TryReadNestedString(analysis?.AnalysisJson, "first_learning_path", "recommended_actor"))
+                ?? MapGoalToActor(ChoiceOf("Q11"))
+                ?? "friend";
+
+            user.Profile ??= new UserProfile { UserId = user.Id };
+            user.Profile.BaselineConfidence = baseline;
+            user.Profile.CurrentConfidence = baseline;
+            user.Profile.HardestActorType = recommendedActor;
+            user.Profile.ClassroomComfort = ScaleOf("Q3");
+            user.Profile.DisagreementComfort = ScaleOf("Q4");
+            user.Profile.SmallTalkComfort = ScaleOf("Q2");
+            user.Profile.UsExperience = ChoiceOf("Q1") ?? user.Profile.UsExperience;
+            user.Profile.AssessmentVersion = definition.Version;
+            user.Profile.UpdatedAt = DateTimeOffset.UtcNow;
+
+            db.AssessmentAttempts.Add(attempt);
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new
+            {
+                attemptId = attempt.Id,
+                analysisStatus = attempt.AnalysisStatus,
+                responseCount = attempt.Responses.Count,
+                analysis = analysis is null ? null : new
+                {
+                    analysis.PromptVersion,
+                    analysis.ModelName,
+                    analysis.Summary,
+                    persona = ParsePersona(analysis.AnalysisJson)
+                }
+            });
+        });
+
+        // Latest persona analysis for a user (for personalising later sessions).
+        api.MapGet("/users/{id:guid}/persona", async (Guid id, BridgeDbContext db, CancellationToken ct) =>
+        {
+            var analysis = await db.PersonaAnalyses.AsNoTracking()
+                .Where(x => x.UserId == id)
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+            return analysis is null
+                ? Results.NotFound()
+                : Results.Ok(new
+                {
+                    analysis.AttemptId,
+                    analysis.PromptVersion,
+                    analysis.ModelName,
+                    analysis.Summary,
+                    persona = ParsePersona(analysis.AnalysisJson),
+                    analysis.CreatedAt
+                });
+        });
+
         api.MapGet("/users/{id:guid}", async (Guid id, BridgeDbContext db, CancellationToken ct) =>
         {
             var user = await db.Users.AsNoTracking().Include(x => x.Profile)
@@ -414,6 +600,91 @@ public static class BridgeEndpoints
     }
 
     private static int Clamp(int value) => Math.Clamp(value, 1, 5);
+
+    private static string ExtractJson(string raw)
+    {
+        var text = raw.Trim();
+        if (text.StartsWith("```", StringComparison.Ordinal))
+        {
+            var firstLineEnd = text.IndexOf('\n');
+            var lastFence = text.LastIndexOf("```", StringComparison.Ordinal);
+            if (firstLineEnd >= 0 && lastFence > firstLineEnd)
+                text = text[(firstLineEnd + 1)..lastFence].Trim();
+        }
+        return text;
+    }
+
+    private static string? TryReadSummary(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+            foreach (var key in new[] { "profile_summary", "summary" })
+                if (doc.RootElement.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String)
+                    return value.GetString();
+        }
+        catch (JsonException) { /* non-JSON output is stored raw */ }
+        return null;
+    }
+
+    private static object? ParsePersona(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? MapRecommendedActor(string? recommended) => recommended?.Trim().ToLowerInvariant() switch
+    {
+        "professor" or "advisor" => "professor",
+        "classmate" or "group_member" or "peer" => "friend",
+        _ => null
+    };
+
+    private static string? MapGoalToActor(string? goal) => goal switch
+    {
+        "professor-communication" or "disagree-feedback" => "professor",
+        "speak-up-confidence" or "group-project" or "general-fluency" => "friend",
+        _ => null
+    };
+
+    private static int? TryReadInt(string? json, string property)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty(property, out var value))
+            {
+                if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number)) return number;
+                if (value.ValueKind == JsonValueKind.String && int.TryParse(value.GetString(), out var parsed)) return parsed;
+            }
+        }
+        catch (JsonException) { }
+        return null;
+    }
+
+    private static string? TryReadNestedString(string? json, string outerKey, string innerKey)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty(outerKey, out var outer) && outer.ValueKind == JsonValueKind.Object &&
+                outer.TryGetProperty(innerKey, out var inner) && inner.ValueKind == JsonValueKind.String)
+                return inner.GetString();
+        }
+        catch (JsonException) { }
+        return null;
+    }
 
     private static int ScoreFor(SessionEvaluation evaluation, string skill) => skill switch
     {

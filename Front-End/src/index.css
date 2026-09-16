@@ -132,13 +132,13 @@ a{color:var(--teal-d);}
 
 /* Refined onboarding and debrief hierarchy */
 .onboarding-question{
-  max-width:18ch;
+  max-width:30ch;
   margin-inline:auto;
-  font-size:clamp(2rem,4vw,2.65rem);
-  line-height:1.08;
+  font-size:clamp(1.7rem,3.2vw,2.2rem);
+  line-height:1.18;
   text-align:center;
   text-wrap:balance;
-  letter-spacing:-.04em;
+  letter-spacing:-.02em;
 }
 .feedback-block{padding:23px 24px 25px;}
 .feedback-title{

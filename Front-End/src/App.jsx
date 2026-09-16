@@ -106,34 +106,21 @@ export default function App() {
     return () => { active = false }
   }, [])
 
-  async function finishOnboarding(localProfile) {
+  // The persona onboarding submits to the API itself (creating the anonymous
+  // user and running the AI snapshot). It hands back the user id; we then load
+  // the profile the submit upserted, plus the catalog, and enter the app.
+  async function completeOnboarding(newUserId) {
     setError('')
-    let currentUserId = userId
-    if (!currentUserId) {
-      const user = await bridgeApi.createAnonymousUser('Learner')
-      currentUserId = user.id
-      localStorage.setItem(USER_KEY, currentUserId)
-      setUserId(currentUserId)
+    localStorage.setItem(USER_KEY, newUserId)
+    setUserId(newUserId)
+    try {
+      const [user] = await Promise.all([bridgeApi.getUser(newUserId), loadCatalog()])
+      setProfile(profileFromUser(user))
+      setScreen('home')
+    } catch (requestError) {
+      setError(requestError.message)
+      setScreen('error')
     }
-
-    const result = await bridgeApi.saveOnboarding(currentUserId, {
-      displayName: 'Learner',
-      countryOfOrigin: localProfile.origin,
-      usExperience: localProfile.time,
-      classroomComfort: localProfile.ratings.class,
-      disagreementComfort: localProfile.ratings.disagree,
-      smallTalkComfort: localProfile.ratings.smalltalk,
-      hardestActorType: actorTypeFor(localProfile.recommended),
-    })
-    await loadCatalog()
-    setProfile({
-      ...localProfile,
-      displayName: 'Learner',
-      confidence: result.baselineConfidence,
-      baselineConfidence: result.baselineConfidence,
-      recommended: actorKeyFor(result.recommendedActorType),
-    })
-    setScreen('home')
   }
 
   function retake() {
@@ -178,7 +165,7 @@ export default function App() {
 
   if (screen === 'loading') return <StatusScreen title="Loading your practice space" />
   if (screen === 'error') return <StatusScreen title="Lanco could not reach the API" message={error} action={() => window.location.reload()} />
-  if (screen === 'onboarding') return <Onboarding onDone={finishOnboarding} />
+  if (screen === 'onboarding') return <Onboarding userId={userId} onComplete={completeOnboarding} />
 
   const actor = selected?.actor
   return <div className="app">

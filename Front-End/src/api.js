@@ -32,6 +32,12 @@ export const bridgeApi = {
     method: 'POST',
     body: JSON.stringify({ userId, assessment }),
   }),
+  getAssessment: (assessmentId) => request(`/assessments/${assessmentId}`),
+  submitAssessment: (assessmentId, userId, answers) => request(`/assessments/${assessmentId}/submit`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, answers }),
+  }),
+  getPersona: (userId) => request(`/users/${userId}/persona`),
   getActors: () => request('/actors'),
   getScenarios: () => request('/scenarios'),
   createSession: (payload) => request('/sessions', {

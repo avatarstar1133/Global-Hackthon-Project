@@ -11,7 +11,10 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<BridgeDbContext>(o => o.UseSqlServer(builder.Configuration.GetConnectionString("BridgeDb")));
 builder.Services.AddSingleton<OnboardingAssessmentService>();
 builder.Services.AddSingleton<PromptBuilder>();
+builder.Services.AddSingleton<PersonaAssessmentService>();
+builder.Services.AddSingleton<PersonaPromptProvider>();
 builder.Services.Configure<OpenAiOptions>(builder.Configuration.GetSection("OpenAI"));
+builder.Services.Configure<PersonaAnalysisOptions>(builder.Configuration.GetSection("PersonaAnalysis"));
 builder.Services.AddHttpClient<IAiClient, OpenAiResponsesClient>((sp, client) =>
 {
     var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<OpenAiOptions>>().Value;
