@@ -15,7 +15,8 @@ builder.Services.AddCors(o => o.AddPolicy("frontend", p => p.WithOrigins(builder
 builder.Services.AddRateLimiter(o => { o.RejectionStatusCode = 429; o.AddPolicy("api", ctx => RateLimitPartition.GetFixedWindowLimiter(ctx.Connection.RemoteIpAddress?.ToString() ?? "local", _ => new FixedWindowRateLimiterOptions { PermitLimit = 60, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 })); });
 var app = builder.Build();
 app.UseExceptionHandler();
-if (!app.Environment.IsDevelopment()) app.UseHttpsRedirection();
+if (builder.Configuration.GetValue<bool>("HttpsRedirection:Enabled"))
+    app.UseHttpsRedirection();
 app.UseCors("frontend");
 app.UseRateLimiter();
 app.MapGet("/health", () => Results.Ok(new { status = "ok", time = DateTimeOffset.UtcNow }));
