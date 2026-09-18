@@ -1,4 +1,4 @@
-<img width="1817" height="202" alt="image" src="https://github.com/user-attachments/assets/3db34d92-91d9-43a9-82dc-b8e5ad5e9f31" />Lanco
+Lanco
 
 Practice the hard conversations before they happen.
 
