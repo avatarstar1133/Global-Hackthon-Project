@@ -1,4 +1,4 @@
-Lanco
+<img width="1817" height="202" alt="image" src="https://github.com/user-attachments/assets/3db34d92-91d9-43a9-82dc-b8e5ad5e9f31" />Lanco
 
 Practice the hard conversations before they happen.
 
@@ -302,40 +302,8 @@ Automatic migration and reference-data seeding during local startup
 
 6. Project Structure
 
-Global-Hackthon-Project-main/
-│
-├── Front-End/
-│   ├── src/
-│   │   ├── App.jsx
-│   │   ├── api.js
-│   │   ├── data.js
-│   │   ├── evaluate.js
-│   │   ├── learning.js
-│   │   └── main.jsx
-│   │
-│   ├── package.json
-│   └── vite.config.js
-│
-├── Back-End/
-│   ├── Bridge.Api/
-│   │   ├── Api/
-│   │   ├── Contracts/
-│   │   ├── Data/
-│   │   │   └── Migrations/
-│   │   ├── Domain/
-│   │   ├── Prompts/
-│   │   │   ├── persona-analysis-v1.txt
-│   │   │   ├── quiz-generation-v1.txt
-│   │   │   └── post-quiz-evaluation-v1.txt
-│   │   ├── Services/
-│   │   ├── Program.cs
-│   │   ├── appsettings.json
-│   │   └── Bridge.Api.csproj
-│   │
-│   ├── Bridge.Api.Tests/
-│   └── Bridge.slnx
-│
-└── .gitignore
+<img width="197" height="433" alt="image" src="https://github.com/user-attachments/assets/41cfb508-0617-4795-8570-d504d30d57b8" />
+
 
 Running the Project Locally
 
